@@ -1,7 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'components/location_tile.dart';
 import 'models/location.dart';
 import 'location_detail.dart';
 import 'styles.dart';
+
+
+const ListItemHeight = 245.0;
 
 class LocationList extends StatefulWidget {
   @override
@@ -10,6 +15,7 @@ class LocationList extends StatefulWidget {
 
 class _LocationListState extends State<LocationList> {
   List<Location> locations = [];
+  bool loading = false;
 
   @override
   void initState() {
@@ -21,29 +27,63 @@ class _LocationListState extends State<LocationList> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text("Locations", style: Styles.navBarTitle)),
-      body: ListView.builder(
-        itemCount: this.locations.length,
-        itemBuilder: _listViewItemBuilder,
+      body: RefreshIndicator(
+        onRefresh: loadData,
+        child: Column(
+          children: <Widget>[
+            renderProgressBar(context),
+            Expanded(
+              child: renderListView(context),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  loadData() async {
-    final locations = await Location.fetchAll();
+  Future<void> loadData() async {
     if (this.mounted) {
-      setState(() {
-        this.locations = locations;
+      setState(() => this.loading = true);
+      Timer(Duration(milliseconds: 3000), () async {
+        final locations = await Location.fetchAll();
+        setState(() {
+          this.locations = locations;
+          this.loading = false;
+        });
       });
     }
   }
 
+  Widget renderProgressBar(BuildContext context) {
+    return (this.loading
+        ? LinearProgressIndicator(
+            value: null,
+            backgroundColor: Colors.white,
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.grey),
+          )
+        : Container());
+  }
+
+  Widget renderListView(BuildContext context) {
+    return ListView.builder(
+      itemCount: this.locations.length,
+      itemBuilder: _listViewItemBuilder,
+    );
+  }
+
   Widget _listViewItemBuilder(BuildContext context, int index) {
     final location = this.locations[index];
-    return ListTile(
-      contentPadding: EdgeInsets.all(10.0),
-      leading: _itemThumbnail(location),
-      title: _itemTitle(location),
+    return GestureDetector(
       onTap: () => _navigateToLocationDetail(context, location.id),
+
+      child: Container(
+        height: ListItemHeight,
+        child: Stack(children: [
+          _tileImage(
+              location.url, MediaQuery.of(context).size.width, ListItemHeight),
+          _tileFooter(location),
+        ]),
+      ),
     );
   }
 
@@ -52,15 +92,32 @@ class _LocationListState extends State<LocationList> {
         MaterialPageRoute(builder: (context) => LocationDetail(locationID)));
   }
 
-  Widget _itemThumbnail(Location location) {
+  Widget _tileFooter(Location location) {
+    final info = LocationTile(location: location, dartTheme: true);
+    final overlay = Container(
+      padding: EdgeInsets.symmetric(
+          vertical: 5.0, horizontal: Styles.horizontalPaddingDefault),
+      decoration: BoxDecoration(color: Colors.black.withOpacity(0.5)),
+      child: info,
+    );
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        overlay
+      ],
+    );
+  }
+
+  Widget _tileImage(String url, double width, double height) {
     Image image;
     try {
-      image = Image.network(location.url, fit: BoxFit.fitWidth);
+      image = Image.network(url, fit: BoxFit.cover);
     } catch (e) {
-      print("could not load image ${location.url}");
+      print("could not load image $url");
     }
     return Container(
-      constraints: BoxConstraints.tightFor(width: 100.0),
+      constraints: BoxConstraints.expand(),
       child: image,
     );
   }
